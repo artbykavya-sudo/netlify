@@ -62,47 +62,68 @@
     const CAPTAIN_EMAIL = 'captain2@network.com'; 
     let activeTopicId = null;
 
-async function init() {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) return window.location.href = 'index.html';
-
-    // 1. Set Rank
-    const isCaptain = (user.email === 'captain2@network.com');
-    document.getElementById('rank-display').innerText = isCaptain ? "RANK: CAPTAIN" : "RANK: PIRATE";
-
-    // 2. Check for profile
-    let { data: profile } = await supabaseClient
-        .from('profiles')
-        .select('recruit_code')
-        .eq('id', user.id)
-        .single();
-
-    // 3. Create Ghost Identity if it doesn't exist
-    if (!profile) {
-        const { count } = await supabaseClient
-            .from('profiles')
-            .select('*', { count: 'exact', head: true });
-
-        let newCode;
-        if (isCaptain) {
-            newCode = 'GHOST-CHIEF-00';
-        } else {
-            // This ensures the first pirate is 01, the second is 02, etc.
-            const pirateNum = (count + 1).toString().padStart(2, '0');
-            newCode = `GHOST-PIRATE-${pirateNum}`;
-        }
-
-        await supabaseClient.from('profiles').insert([
-            { id: user.id, username: isCaptain ? 'CAPTAIN' : 'RECRUIT', recruit_code: newCode }
-        ]);
-        document.getElementById('my-invite-code').innerText = newCode;
-    } else {
-        document.getElementById('my-invite-code').innerText = profile.recruit_code;
+async function loadTopics() {
+        const { data } = await supabaseClient.from('topics').select('*').order('id', { ascending: false });
+        const feed = document.getElementById('topics-feed');
+        feed.innerHTML = '';
+        if(data) data.forEach(t => {
+            const card = document.createElement('div');
+            card.className = 'topic-card';
+            card.innerText = t.subject;
+            card.onclick = () => openThread(t.id, t.subject);
+            feed.appendChild(card);
+        });
     }
 
-    loadTopics();
-    
-}
+    async function openThread(id, title) {
+        activeTopicId = id;
+        document.getElementById('inbox-view').style.display = 'none';
+        document.getElementById('thread-view').style.display = 'block';
+        document.getElementById('thread-title').innerText = title;
+        loadReplies();
+    }
+
+    async function loadReplies() {
+        const { data } = await supabaseClient.from('intel').select('*').eq('topic_id', activeTopicId).order('id', { ascending: false });
+        const feed = document.getElementById('replies-feed');
+        feed.innerHTML = '';
+        if(data) data.forEach(m => {
+            // Highlighting the Chief in Red, Pirates in Green
+            const isChief = m.username === 'GHOST-CHIEF-00';
+            const nameColor = isChief ? '#ff4d4d' : '#00ff00'; 
+            feed.innerHTML += `<div class="message-card"><strong style="color:${nameColor}">${m.username}</strong>: ${m.message}</div>`;
+        });
+    }
+
+    document.getElementById('create-topic-btn').onclick = async () => {
+        const sub = document.getElementById('new-topic-input').value;
+        if(sub) { 
+            await supabaseClient.from('topics').insert([{ subject: sub }]); 
+            document.getElementById('new-topic-input').value = '';
+            loadTopics(); 
+        }
+    };
+
+    document.getElementById('submit-reply-btn').onclick = async () => {
+        const msg = document.getElementById('reply-input').value;
+        // Grab the user's specific Ghost Identity from the UI
+        const myAlias = document.getElementById('my-invite-code').innerText;
+        
+        if(msg && activeTopicId) {
+            await supabaseClient.from('intel').insert([{ 
+                topic_id: activeTopicId, 
+                message: msg, 
+                username: myAlias 
+            }]);
+            document.getElementById('reply-input').value = '';
+            loadReplies();
+        }
+    };
+
+    document.getElementById('logout-btn').onclick = async () => { 
+        await supabaseClient.auth.signOut(); 
+        window.location.href = 'index.html'; 
+    };
 init();
 
     async function loadTopics() {
@@ -161,6 +182,7 @@ init();
 </body>
 
 </html>
+
 
 
 
