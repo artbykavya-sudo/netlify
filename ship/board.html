@@ -63,24 +63,32 @@
     let activeTopicId = null;
 
     async function init() {
-const { data: { user } } = await supabaseClient.auth.getUser();
-if (!user) return window.location.href = 'index.html';
+async function init() {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return window.location.href = 'index.html';
 
-document.getElementById('rank-display').innerText = (user.email === CAPTAIN_EMAIL) ? "RANK: CAPTAIN" : "RANK: PIRATE";
+    // 1. Set Rank
+    document.getElementById('rank-display').innerText = (user.email === CAPTAIN_EMAIL) ? "RANK: CAPTAIN" : "RANK: PIRATE";
 
-let { data: profile } = await supabaseClient
-.from('profiles')
-.select('recruit_code')
-.eq('id', user.id)
-.single();
+    // 2. Try to get their profile
+    let { data: profile } = await supabaseClient
+        .from('profiles')
+        .select('recruit_code')
+        .eq('id', user.id)
+        .single();
 
-if (profile && profile.recruit_code) {
-document.getElementById('my-invite-code').innerText = profile.recruit_code;
-} else {
-document.getElementById('my-invite-code').innerText = "GENERATING...";
-}
+    // 3. If no profile exists, CREATE one automatically
+    if (!profile) {
+        const newCode = 'AGENT-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+        await supabaseClient.from('profiles').insert([
+            { id: user.id, username: 'RECRUIT', recruit_code: newCode }
+        ]);
+        document.getElementById('my-invite-code').innerText = newCode;
+    } else {
+        document.getElementById('my-invite-code').innerText = profile.recruit_code;
+    }
 
-loadTopics();
+    loadTopics();
 }
 init();
 
@@ -140,4 +148,5 @@ init();
 </body>
 
 </html>
+
 
