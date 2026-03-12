@@ -66,6 +66,21 @@
 const { data: { user } } = await supabaseClient.auth.getUser();
 if (!user) return window.location.href = 'index.html';
 
+document.getElementById('rank-display').innerText = (user.email === CAPTAIN_EMAIL) ? "RANK: CAPTAIN" : "RANK: PIRATE";
+
+let { data: profile } = await supabaseClient
+.from('profiles')
+.select('recruit_code')
+.eq('id', user.id)
+.single();
+
+if (profile && profile.recruit_code) {
+document.getElementById('my-invite-code').innerText = profile.recruit_code;
+} else {
+document.getElementById('my-invite-code').innerText = "GENERATING...";
+}
+
+loadTopics();
 }
 init();
 
@@ -125,3 +140,4 @@ init();
 </body>
 
 </html>
+
