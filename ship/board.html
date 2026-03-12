@@ -83,46 +83,26 @@ async function loadTopics() {
         loadReplies();
     }
 
-    async function loadReplies() {
-        const { data } = await supabaseClient.from('intel').select('*').eq('topic_id', activeTopicId).order('id', { ascending: false });
-        const feed = document.getElementById('replies-feed');
-        feed.innerHTML = '';
-        if(data) data.forEach(m => {
-            // Highlighting the Chief in Red, Pirates in Green
-            const isChief = m.username === 'GHOST-CHIEF-00';
-            const nameColor = isChief ? '#ff4d4d' : '#00ff00'; 
-            feed.innerHTML += `<div class="message-card"><strong style="color:${nameColor}">${m.username}</strong>: ${m.message}</div>`;
-        });
-    }
+    async function init() {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) return window.location.href = 'index.html';
 
-    document.getElementById('create-topic-btn').onclick = async () => {
-        const sub = document.getElementById('new-topic-input').value;
-        if(sub) { 
-            await supabaseClient.from('topics').insert([{ subject: sub }]); 
-            document.getElementById('new-topic-input').value = '';
-            loadTopics(); 
-        }
-    };
+    // 1. Set Rank Display
+    const isCaptain = (user.email === 'captain2@network.com');
+    document.getElementById('rank-display').innerText = isCaptain ? "RANK: CAPTAIN" : "RANK: PIRATE";
 
-    document.getElementById('submit-reply-btn').onclick = async () => {
-        const msg = document.getElementById('reply-input').value;
-        // Grab the user's specific Ghost Identity from the UI
-        const myAlias = document.getElementById('my-invite-code').innerText;
-        
-        if(msg && activeTopicId) {
-            await supabaseClient.from('intel').insert([{ 
-                topic_id: activeTopicId, 
-                message: msg, 
-                username: myAlias 
-            }]);
-            document.getElementById('reply-input').value = '';
-            loadReplies();
-        }
-    };
+    // 2. Just FETCH the identity (The database already created it!)
+    let { data: profile } = await supabaseClient
+        .from('profiles')
+        .select('recruit_code')
+        .eq('id', user.id)
+        .single();
 
-    document.getElementById('logout-btn').onclick = async () => { 
-        await supabaseClient.auth.signOut(); 
-        window.location.href = 'index.html'; 
+    // 3. Display the code or a fallback if something goes wrong
+    document.getElementById('my-invite-code').innerText = profile ? profile.recruit_code : "UNAUTHORIZED";
+
+    loadTopics();
+}
     };
 init();
 
@@ -182,6 +162,7 @@ init();
 </body>
 
 </html>
+
 
 
 
