@@ -63,35 +63,11 @@
     let activeTopicId = null;
 
     async function init() {
-        const { data: { user } } = await supabaseClient.auth.getUser();
-        if (!user) return window.location.href = 'index.html';
-        
-        // Update Rank
-        document.getElementById('rank-display').innerText = (user.email === CAPTAIN_EMAIL) ? "RANK: CAPTAIN" : "RANK: PIRATE";
+const { data: { user } } = await supabaseClient.auth.getUser();
+if (!user) return window.location.href = 'index.html';
 
-        // --- UNIQUE CODE LOGIC ---
-        // 1. Check if this user already has a code assigned to them
-        let { data: existing } = await supabaseClient
-            .from('invites').select('code').eq('claimed_by', user.email).maybeSingle();
-
-        if (existing) {
-            document.getElementById('my-invite-code').innerText = existing.code;
-        } else {
-            // 2. If not, find the FIRST available row that is NOT used and NOT claimed
-            let { data: available } = await supabaseClient
-                .from('invites').select('*').eq('is_used', false).is('claimed_by', null).limit(1).maybeSingle();
-
-            if (available) {
-                // 3. Claim it immediately for this specific email
-                await supabaseClient.from('invites').update({ claimed_by: user.email }).eq('id', available.id);
-                document.getElementById('my-invite-code').innerText = available.code;
-            } else {
-                document.getElementById('my-invite-code').innerText = "CAPACITY FULL";
-            }
-        }
-        loadTopics();
-    }
-    init();
+}
+init();
 
     async function loadTopics() {
         const { data } = await supabaseClient.from('topics').select('*').order('id', { ascending: false });
@@ -147,4 +123,5 @@
     document.getElementById('logout-btn').onclick = async () => { await supabaseClient.auth.signOut(); window.location.href = 'index.html'; };
 </script>
 </body>
+
 </html>
