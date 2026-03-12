@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Vault - Network</title>
+    <style>
+        body { background-color: #0a0a0a; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; padding: 20px; }
+        .container { max-width: 700px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00ff00; padding-bottom: 10px; margin-bottom: 20px; }
+        .invite-box { background: #111; border: 1px dashed #00ff00; padding: 20px; text-align: center; margin-bottom: 20px; box-shadow: inset 0 0 10px #000; }
+        .input-box { display: flex; margin-bottom: 20px; gap: 10px; }
+        input[type="text"] { flex-grow: 1; padding: 12px; background: #000; color: #00ff00; border: 1px solid #00ff00; outline: none; }
+        button { padding: 10px 15px; background: #00ff00; color: #000; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: #fff; }
+        .topic-card { background: #111; border: 1px solid #004400; padding: 15px; margin-bottom: 10px; cursor: pointer; }
+        .topic-card:hover { border-color: #00ff00; }
+        .message-card { background: #000; border-left: 3px solid #00ff00; padding: 10px; margin-bottom: 10px; font-size: 0.9em; }
+        #thread-view { display: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>
+            <h2 style="margin:0; letter-spacing: 2px;">THE VAULT <span style="font-size: 0.5em; color: cyan;">v2.0</span></h2>
+            <div id="rank-display" style="font-size: 0.8em; color: #888;">INITIALIZING...</div>
+        </div>
+        <button id="logout-btn" style="background: #660000; color: white;">LOGOUT</button>
+    </div>
+
+    <div class="invite-box">
+        <span style="font-size: 0.8em; color: #888;">YOUR UNIQUE RECRUITMENT KEY:</span><br>
+        <strong id="my-invite-code" style="color: white; font-size: 1.6em; letter-spacing: 3px; display: block; margin-top: 5px;">SYNCING...</strong>
+    </div>
+
+    <div id="inbox-view">
+        <div class="input-box">
+            <input type="text" id="new-topic-input" placeholder="Start new thread...">
+            <button id="create-topic-btn">CREATE</button>
+        </div>
+        <div id="topics-feed"></div>
+    </div>
+
+    <div id="thread-view">
+        <button onclick="location.reload()" style="background:#333; color:white; margin-bottom:15px; padding: 5px 10px;">← BACK</button>
+        <h3 id="thread-title" style="color: white; border-bottom: 1px solid #222; padding-bottom: 10px;"></h3>
+        <div class="input-box">
+            <input type="text" id="reply-input" placeholder="Enter intel...">
+            <button id="submit-reply-btn">SUBMIT</button>
+        </div>
+        <div id="replies-feed"></div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+    const supabaseUrl = 'https://fobshgegvpbzfilqycpb.supabase.co';
+    const supabaseKey = 'sb_publishable_BlynNUCxwVjeeLhPQNtHQg_3x5kPY5o';
+    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+    const CAPTAIN_EMAIL = 'captain2@network.com'; 
+    let activeTopicId = null;
+
+    async function init() {
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (!user) return window.location.href = 'index.html';
+        
+        // Update Rank
+        document.getElementById('rank-display').innerText = (user.email === CAPTAIN_EMAIL) ? "RANK: CAPTAIN" : "RANK: PIRATE";
+
+        // --- UNIQUE CODE LOGIC ---
+        // 1. Check if this user already has a code assigned to them
+        let { data: existing } = await supabaseClient
+            .from('invites').select('code').eq('claimed_by', user.email).maybeSingle();
+
+        if (existing) {
+            document.getElementById('my-invite-code').innerText = existing.code;
+        } else {
+            // 2. If not, find the FIRST available row that is NOT used and NOT claimed
+            let { data: available } = await supabaseClient
+                .from('invites').select('*').eq('is_used', false).is('claimed_by', null).limit(1).maybeSingle();
+
+            if (available) {
+                // 3. Claim it immediately for this specific email
+                await supabaseClient.from('invites').update({ claimed_by: user.email }).eq('id', available.id);
+                document.getElementById('my-invite-code').innerText = available.code;
+            } else {
+                document.getElementById('my-invite-code').innerText = "CAPACITY FULL";
+            }
+        }
+        loadTopics();
+    }
+    init();
+
+    async function loadTopics() {
+        const { data } = await supabaseClient.from('topics').select('*').order('id', { ascending: false });
+        const feed = document.getElementById('topics-feed');
+        feed.innerHTML = '';
+        if(data) data.forEach(t => {
+            const card = document.createElement('div');
+            card.className = 'topic-card';
+            card.innerText = t.subject;
+            card.onclick = () => openThread(t.id, t.subject);
+            feed.appendChild(card);
+        });
+    }
+
+    async function openThread(id, title) {
+        activeTopicId = id;
+        document.getElementById('inbox-view').style.display = 'none';
+        document.getElementById('thread-view').style.display = 'block';
+        document.getElementById('thread-title').innerText = title;
+        loadReplies();
+    }
+
+    async function loadReplies() {
+        const { data } = await supabaseClient.from('intel').select('*').eq('topic_id', activeTopicId).order('id', { ascending: false });
+        const feed = document.getElementById('replies-feed');
+        feed.innerHTML = '';
+        if(data) data.forEach(m => {
+            const nameColor = m.username === 'CAPTAIN' ? 'red' : '#00ff00';
+            feed.innerHTML += `<div class="message-card"><strong style="color:${nameColor}">${m.username}</strong>: ${m.message}</div>`;
+        });
+    }
+
+    document.getElementById('create-topic-btn').onclick = async () => {
+        const sub = document.getElementById('new-topic-input').value;
+        if(sub) { await supabaseClient.from('topics').insert([{ subject: sub }]); location.reload(); }
+    };
+
+    document.getElementById('submit-reply-btn').onclick = async () => {
+        const msg = document.getElementById('reply-input').value;
+        const alias = localStorage.getItem('pirate_alias') || "PIRATE";
+        if(msg && activeTopicId) {
+            const isCap = document.getElementById('rank-display').innerText.includes('CAPTAIN');
+            await supabaseClient.from('intel').insert([{ 
+                topic_id: activeTopicId, 
+                message: msg, 
+                username: isCap ? "CAPTAIN" : alias 
+            }]);
+            document.getElementById('reply-input').value = '';
+            loadReplies();
+        }
+    };
+
+    document.getElementById('logout-btn').onclick = async () => { await supabaseClient.auth.signOut(); window.location.href = 'index.html'; };
+</script>
+</body>
+</html>
