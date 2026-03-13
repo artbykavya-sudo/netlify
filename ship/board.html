@@ -9,6 +9,7 @@
         .container { max-width: 700px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00ff00; padding-bottom: 10px; margin-bottom: 20px; }
         .invite-box { background: #111; border: 1px dashed #00ff00; padding: 20px; text-align: center; margin-bottom: 20px; box-shadow: inset 0 0 10px #000; }
+        .generator-box { background: #050505; border: 1px solid #333; padding: 15px; text-align: center; margin-bottom: 20px; }
         .input-box { display: flex; margin-bottom: 20px; gap: 10px; }
         input[type="text"] { flex-grow: 1; padding: 12px; background: #000; color: #00ff00; border: 1px solid #00ff00; outline: none; }
         button { padding: 10px 15px; background: #00ff00; color: #000; border: none; font-weight: bold; cursor: pointer; }
@@ -30,8 +31,13 @@
     </div>
 
     <div class="invite-box">
-        <span style="font-size: 0.8em; color: #888;">YOUR UNIQUE RECRUITMENT KEY:</span>
+        <span style="font-size: 0.8em; color: #888;">YOUR UNIQUE IDENTITY:</span>
         <strong id="my-invite-code" style="color: white; font-size: 1.6em; letter-spacing: 3px; display: block; margin-top: 5px;">SYNCING...</strong>
+    </div>
+
+    <div class="generator-box">
+        <button id="generate-key-btn" style="background: #222; color: #00ff00; border: 1px solid #00ff00;">GENERATE 1-TIME INVITE KEY FOR A RECRUIT</button>
+        <strong id="new-key-display" style="display: block; margin-top: 10px; color: yellow; font-size: 1.2em; letter-spacing: 2px;"></strong>
     </div>
 
     <div id="inbox-view">
@@ -62,18 +68,11 @@
     let activeTopicId = null;
 
     async function init() {
-        // Get the person logging in
         const { data: { user } } = await supabaseClient.auth.getUser();
         if (!user) return window.location.href = 'index.html';
 
-        // 1. Check if they already have a code in the database (Using maybeSingle to prevent crashing)
-        let { data: existingProfile } = await supabaseClient
-            .from('profiles')
-            .select('recruit_code')
-            .eq('id', user.id)
-            .maybeSingle();
+        let { data: existingProfile } = await supabaseClient.from('profiles').select('recruit_code').eq('id', user.id).maybeSingle();
 
-        // 2. If they have a code, just show it and load the board
         if (existingProfile && existingProfile.recruit_code) {
             const isCaptain = existingProfile.recruit_code === 'GHOST-CHIEF-00';
             document.getElementById('rank-display').innerText = isCaptain ? "RANK: CAPTAIN" : "RANK: PIRATE";
@@ -82,38 +81,33 @@
             return; 
         }
 
-        // 3. IF NO CODE EXISTS: Generate one!
-        const { count } = await supabaseClient
-            .from('profiles')
-            .select('*', { count: 'exact', head: true });
-
-        // Add 1 to the count to get the next number, format it to 2 digits
+        const { count } = await supabaseClient.from('profiles').select('*', { count: 'exact', head: true });
         let nextNumber = (count + 1).toString().padStart(2, '0');
         let newCode = "GHOST-PIRATE-" + nextNumber;
 
-        if (user.email === 'captain2@network.com') {
-            newCode = 'GHOST-CHIEF-00';
-        }
+        if (user.email === 'captain2@network.com') { newCode = 'GHOST-CHIEF-00'; }
 
-        // Set rank display for new users
         document.getElementById('rank-display').innerText = (newCode === 'GHOST-CHIEF-00') ? "RANK: CAPTAIN" : "RANK: PIRATE";
 
-        // 4. Save this brand new code into the database
-        await supabaseClient
-            .from('profiles')
-            .insert([{ 
-                id: user.id, 
-                username: (newCode === 'GHOST-CHIEF-00') ? 'CAPTAIN' : 'RECRUIT',
-                recruit_code: newCode 
-            }]);
-
-        // 5. Display the newly minted code on the screen!
+        await supabaseClient.from('profiles').insert([{ id: user.id, username: (newCode === 'GHOST-CHIEF-00') ? 'CAPTAIN' : 'RECRUIT', recruit_code: newCode }]);
         document.getElementById('my-invite-code').innerText = newCode;
         loadTopics();
     }
     
-    // Start the engine
     init();
+
+    // GENERATE INVITE KEY LOGIC
+    document.getElementById('generate-key-btn').onclick = async () => {
+        // Create a random 6-character code (e.g., KEY-A9X2B)
+        const randomString = Math.random().toString(36).substr(2, 5).toUpperCase();
+        const newInviteKey = "KEY-" + randomString;
+        
+        // Save it to the invites database so the bouncer knows it's real
+        await supabaseClient.from('invites').insert([{ code: newInviteKey, is_used: false }]);
+        
+        // Display it to the user
+        document.getElementById('new-key-display').innerText = "GIVE THIS CODE TO YOUR RECRUIT: " + newInviteKey;
+    };
 
     async function loadTopics() {
         const { data } = await supabaseClient.from('topics').select('*').order('id', { ascending: false });
@@ -144,37 +138,3 @@
             const isChief = m.username === 'GHOST-CHIEF-00';
             const nameColor = isChief ? '#ff4d4d' : '#00ff00'; 
             feed.innerHTML += `<div class="message-card"><strong style="color:${nameColor}">${m.username}</strong>: ${m.message}</div>`;
-        });
-    }
-
-    document.getElementById('create-topic-btn').onclick = async () => {
-        const sub = document.getElementById('new-topic-input').value;
-        if(sub) { 
-            await supabaseClient.from('topics').insert([{ subject: sub }]); 
-            document.getElementById('new-topic-input').value = '';
-            loadTopics(); 
-        }
-    };
-
-    document.getElementById('submit-reply-btn').onclick = async () => {
-        const msg = document.getElementById('reply-input').value;
-        const myAlias = document.getElementById('my-invite-code').innerText;
-        
-        if(msg && activeTopicId) {
-            await supabaseClient.from('intel').insert([{ 
-                topic_id: activeTopicId, 
-                message: msg, 
-                username: myAlias 
-            }]);
-            document.getElementById('reply-input').value = '';
-            loadReplies();
-        }
-    };
-
-    document.getElementById('logout-btn').onclick = async () => { 
-        await supabaseClient.auth.signOut(); 
-        window.location.href = 'index.html'; 
-    };
-</script>
-</body>
-</html>
