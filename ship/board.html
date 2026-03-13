@@ -14,13 +14,13 @@
         input[type="text"] { flex-grow: 1; padding: 12px; background: #000; color: #00ff00; border: 1px solid #00ff00; outline: none; }
         button { padding: 10px 15px; background: #00ff00; color: #000; border: none; font-weight: bold; cursor: pointer; }
         .message-card { background: #000; border-left: 3px solid #00ff00; padding: 10px; margin-bottom: 10px; font-size: 0.9em; word-wrap: break-word; }
-        #new-key-display { color: yellow; display: block; margin-top: 10px; font-weight: bold; letter-spacing: 1px; }
+        #new-key-display { color: yellow; display: block; margin-top: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h2 style="margin:0; letter-spacing: 2px;">THE VAULT <span style="font-size: 0.5em; color: cyan;">v2.5</span></h2>
+        <h2 style="margin:0; letter-spacing: 2px;">THE VAULT <span style="font-size: 0.5em; color: cyan;">v3.0</span></h2>
         <button id="logout-btn" style="background: #660000; color: white;">LOGOUT</button>
     </div>
 
@@ -35,7 +35,7 @@
     </div>
 
     <div class="input-box">
-        <input type="text" id="msg-input" placeholder="Broadcast intel to the network...">
+        <input type="text" id="msg-input" placeholder="Broadcast intel...">
         <button id="send-btn">SEND</button>
     </div>
 
@@ -48,58 +48,67 @@
     const supabaseKey = 'sb_publishable_BlynNUCxwVjeeLhPQNtHQg_3x5kPY5o';
     const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-    // 1. LOGOUT
     document.getElementById('logout-btn').onclick = async () => {
         await supabaseClient.auth.signOut();
         window.location.href = 'index.html';
     };
 
-    // 2. INITIALIZE
     async function init() {
         const { data: { user } } = await supabaseClient.auth.getUser();
         if (!user) return window.location.href = 'index.html';
 
         let { data: profile } = await supabaseClient.from('profiles').select('recruit_code').eq('id', user.id).maybeSingle();
         
-        let myCode = profile ? profile.recruit_code : "GHOST-UNKNOWN";
-        document.getElementById('my-invite-code').innerText = myCode;
+        // If profile doesn't exist, create it
+        if (!profile) {
+            const { count } = await supabaseClient.from('profiles').select('*', { count: 'exact', head: true });
+            let newCode = "GHOST-PIRATE-" + (count + 1).toString().padStart(2, '0');
+            if (user.email === 'captain2@network.com') newCode = 'GHOST-CHIEF-00';
+            
+            await supabaseClient.from('profiles').insert([{ id: user.id, recruit_code: newCode }]);
+            document.getElementById('my-invite-code').innerText = newCode;
+        } else {
+            document.getElementById('my-invite-code').innerText = profile.recruit_code;
+        }
 
         loadMessages();
     }
 
-    // 3. GENERATE YELLOW KEY
-    document.getElementById('generate-key-btn').onclick = async () => {
-        const randomString = Math.random().toString(36).substr(2, 5).toUpperCase();
-        const newInviteKey = "KEY-" + randomString;
-        
-        const { error } = await supabaseClient.from('invites').insert([{ code: newInviteKey, is_used: false }]);
-        
-        if (error) {
-            alert("Error creating key. Check Supabase 'invites' table.");
-        } else {
-            document.getElementById('new-key-display').innerText = "GIVE THIS TO RECRUIT: " + newInviteKey;
-        }
-    };
-
-    // 4. LOAD FEED
     async function loadMessages() {
-        const { data } = await supabaseClient.from('intel').select('*').order('created_at', { ascending: false });
+        // MATCHING YOUR SCREENSHOT: Table 'intel', Column 'message' and 'username'
+        const { data, error } = await supabaseClient
+            .from('intel')
+            .select('message, username') 
+            .order('id', { ascending: false });
+
+        if (error) {
+            console.error("Error loading feed:", error);
+            return;
+        }
+
         const feed = document.getElementById('feed');
         feed.innerHTML = '';
         if (data) {
             data.forEach(m => {
-                feed.innerHTML += `<div class="message-card"><strong style="color: #00ff00">${m.username}</strong>: ${m.message}</div>`;
+                // We use the exact names from your screenshot
+                feed.innerHTML += `<div class="message-card"><strong style="color: #00ff00">${m.username || 'ANON'}</strong>: ${m.message}</div>`;
             });
         }
     }
 
-    // 5. SEND INTEL
+    document.getElementById('generate-key-btn').onclick = async () => {
+        const randomString = Math.random().toString(36).substr(2, 5).toUpperCase();
+        const newInviteKey = "KEY-" + randomString;
+        await supabaseClient.from('invites').insert([{ code: newInviteKey, is_used: false }]);
+        document.getElementById('new-key-display').innerText = "NEW KEY: " + newInviteKey;
+    };
+
     document.getElementById('send-btn').onclick = async () => {
         const msg = document.getElementById('msg-input').value;
-        const username = document.getElementById('my-invite-code').innerText;
-        
+        const myName = document.getElementById('my-invite-code').innerText;
         if (msg) {
-            await supabaseClient.from('intel').insert([{ message: msg, username: username }]);
+            // MATCHING YOUR SCREENSHOT: Insert into 'message' and 'username'
+            await supabaseClient.from('intel').insert([{ message: msg, username: myName }]);
             document.getElementById('msg-input').value = '';
             loadMessages();
         }
