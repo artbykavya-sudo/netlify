@@ -8,44 +8,32 @@
         body { background-color: #0a0a0a; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; padding: 20px; }
         .container { max-width: 700px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00ff00; padding-bottom: 10px; margin-bottom: 20px; }
-        .invite-box { background: #111; border: 1px dashed #00ff00; padding: 20px; text-align: center; margin-bottom: 20px; box-shadow: inset 0 0 10px #000; }
-        .generator-box { background: #050505; border: 1px solid #333; padding: 15px; text-align: center; margin-bottom: 20px; }
+        .invite-box { background: #111; border: 1px dashed #00ff00; padding: 20px; text-align: center; margin-bottom: 20px; }
         .input-box { display: flex; margin-bottom: 20px; gap: 10px; }
         input[type="text"] { flex-grow: 1; padding: 12px; background: #000; color: #00ff00; border: 1px solid #00ff00; outline: none; }
         button { padding: 10px 15px; background: #00ff00; color: #000; border: none; font-weight: bold; cursor: pointer; }
-        button:hover { background: #fff; }
         .topic-card { background: #111; border: 1px solid #004400; padding: 15px; margin-bottom: 10px; cursor: pointer; }
-        .message-card { background: #000; border-left: 3px solid #00ff00; padding: 10px; margin-bottom: 10px; font-size: 0.9em; }
-        #thread-view { display: none; }
+        .message-card { background: #000; border-left: 3px solid #00ff00; padding: 10px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <div>
-            <h2 style="margin:0; letter-spacing: 2px;">THE VAULT</h2>
-            <div id="rank-display" style="font-size: 0.8em; color: #888;">RANK: INITIALIZING...</div>
-        </div>
+        <h2 style="margin:0;">THE VAULT</h2>
         <button id="logout-btn" style="background: #660000; color: white;">LOGOUT</button>
     </div>
 
     <div class="invite-box">
-        <span style="font-size: 0.8em; color: #888;">YOUR UNIQUE IDENTITY:</span>
-        <strong id="my-invite-code" style="color: white; font-size: 1.6em; letter-spacing: 3px; display: block; margin-top: 5px;">SYNCING...</strong>
+        <span style="font-size: 0.8em; color: #888;">IDENTITY:</span>
+        <strong id="my-invite-code" style="color: white; font-size: 1.6em; display: block;">SYNCING...</strong>
     </div>
 
-    <div class="generator-box">
-        <button id="generate-key-btn" style="background: #222; color: #00ff00; border: 1px solid #00ff00;">GENERATE 1-TIME INVITE KEY</button>
-        <strong id="new-key-display" style="display: block; margin-top: 10px; color: yellow; font-size: 1.2em; letter-spacing: 2px;"></strong>
+    <div class="input-box">
+        <input type="text" id="msg-input" placeholder="Broadcast intel to the network...">
+        <button id="send-btn">SEND</button>
     </div>
 
-    <div id="inbox-view">
-        <div class="input-box">
-            <input type="text" id="new-topic-input" placeholder="Start new thread...">
-            <button id="create-topic-btn">CREATE</button>
-        </div>
-        <div id="topics-feed"></div>
-    </div>
+    <div id="feed"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -54,55 +42,50 @@
     const supabaseKey = 'sb_publishable_BlynNUCxwVjeeLhPQNtHQg_3x5kPY5o';
     const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-    // LOGOUT BUTTON (Fixed to work no matter what)
-    document.getElementById('logout-btn').onclick = async () => { 
-        console.log("Logging out...");
-        await supabaseClient.auth.signOut(); 
-        window.location.href = 'index.html'; 
+    // 1. LOGOUT
+    document.getElementById('logout-btn').onclick = async () => {
+        await supabaseClient.auth.signOut();
+        window.location.href = 'index.html';
     };
 
+    // 2. INITIALIZE IDENTITY & LOAD MESSAGES
     async function init() {
-        try {
-            const { data: { user } } = await supabaseClient.auth.getUser();
-            if (!user) {
-                window.location.href = 'index.html';
-                return;
-            }
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (!user) return window.location.href = 'index.html';
 
-            // Try to fetch profile
-            let { data: profile, error } = await supabaseClient
-                .from('profiles')
-                .select('recruit_code')
-                .eq('id', user.id)
-                .maybeSingle();
+        // Get Profile
+        let { data: profile } = await supabaseClient.from('profiles').select('recruit_code').eq('id', user.id).maybeSingle();
+        let myCode = profile ? profile.recruit_code : "GHOST-UNKNOWN";
+        document.getElementById('my-invite-code').innerText = myCode;
 
-            if (profile && profile.recruit_code) {
-                document.getElementById('my-invite-code').innerText = profile.recruit_code;
-                document.getElementById('rank-display').innerText = (profile.recruit_code === 'GHOST-CHIEF-00') ? "RANK: CAPTAIN" : "RANK: PIRATE";
-            } else {
-                // Generate a new code if they don't have one
-                const { count } = await supabaseClient.from('profiles').select('*', { count: 'exact', head: true });
-                let newCode = "GHOST-PIRATE-" + (count + 1).toString().padStart(2, '0');
-                if (user.email === 'captain2@network.com') newCode = 'GHOST-CHIEF-00';
+        loadMessages();
+    }
 
-                await supabaseClient.from('profiles').insert([{ id: user.id, recruit_code: newCode }]);
-                document.getElementById('my-invite-code').innerText = newCode;
-            }
-        } catch (err) {
-            console.error("Initialization error:", err);
-            document.getElementById('my-invite-code').innerText = "ERROR - REFRESH PAGE";
+    // 3. LOAD MESSAGES FROM DATABASE
+    async function loadMessages() {
+        const { data } = await supabaseClient.from('intel').select('*').order('created_at', { ascending: false });
+        const feed = document.getElementById('feed');
+        feed.innerHTML = '';
+        if (data) {
+            data.forEach(m => {
+                feed.innerHTML += `<div class="message-card"><strong>${m.username}</strong>: ${m.message}</div>`;
+            });
         }
     }
 
-    // GENERATE KEY (Fixed)
-    document.getElementById('generate-key-btn').onclick = async () => {
-        try {
-            const randomString = Math.random().toString(36).substr(2, 5).toUpperCase();
-            const newInviteKey = "KEY-" + randomString;
-            await supabaseClient.from('invites').insert([{ code: newInviteKey, is_used: false }]);
-            document.getElementById('new-key-display').innerText = "NEW KEY: " + newInviteKey;
-        } catch (e) {
-            alert("Check if 'invites' table exists in Supabase.");
+    // 4. SEND NEW MESSAGE
+    document.getElementById('send-btn').onclick = async () => {
+        const msg = document.getElementById('msg-input').value;
+        const username = document.getElementById('my-invite-code').innerText;
+        
+        if (msg) {
+            const { error } = await supabaseClient.from('intel').insert([{ message: msg, username: username }]);
+            if (error) {
+                alert("Error sending: " + error.message);
+            } else {
+                document.getElementById('msg-input').value = '';
+                loadMessages(); // Refresh feed
+            }
         }
     };
 
