@@ -47,4 +47,134 @@
         <h3 id="thread-title" style="color: white; border-bottom: 1px solid #222; padding-bottom: 10px;"></h3>
         <div class="input-box">
             <input type="text" id="reply-input" placeholder="Enter intel...">
-            <button id="submit-reply-btn">SUBMIT
+            <button id="submit-reply-btn">SUBMIT</button>
+        </div>
+        <div id="replies-feed"></div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+    const supabaseUrl = 'https://fobshgegvpbzfilqycpb.supabase.co';
+    const supabaseKey = 'sb_publishable_BlynNUCxwVjeeLhPQNtHQg_3x5kPY5o';
+    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+    let activeTopicId = null;
+
+    async function init() {
+        // Get the person logging in
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (!user) return window.location.href = 'index.html';
+
+        // 1. Check if they already have a code in the database (Using maybeSingle to prevent crashing)
+        let { data: existingProfile } = await supabaseClient
+            .from('profiles')
+            .select('recruit_code')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        // 2. If they have a code, just show it and load the board
+        if (existingProfile && existingProfile.recruit_code) {
+            const isCaptain = existingProfile.recruit_code === 'GHOST-CHIEF-00';
+            document.getElementById('rank-display').innerText = isCaptain ? "RANK: CAPTAIN" : "RANK: PIRATE";
+            document.getElementById('my-invite-code').innerText = existingProfile.recruit_code;
+            loadTopics();
+            return; 
+        }
+
+        // 3. IF NO CODE EXISTS: Generate one!
+        const { count } = await supabaseClient
+            .from('profiles')
+            .select('*', { count: 'exact', head: true });
+
+        // Add 1 to the count to get the next number, format it to 2 digits
+        let nextNumber = (count + 1).toString().padStart(2, '0');
+        let newCode = "GHOST-PIRATE-" + nextNumber;
+
+        if (user.email === 'captain2@network.com') {
+            newCode = 'GHOST-CHIEF-00';
+        }
+
+        // Set rank display for new users
+        document.getElementById('rank-display').innerText = (newCode === 'GHOST-CHIEF-00') ? "RANK: CAPTAIN" : "RANK: PIRATE";
+
+        // 4. Save this brand new code into the database
+        await supabaseClient
+            .from('profiles')
+            .insert([{ 
+                id: user.id, 
+                username: (newCode === 'GHOST-CHIEF-00') ? 'CAPTAIN' : 'RECRUIT',
+                recruit_code: newCode 
+            }]);
+
+        // 5. Display the newly minted code on the screen!
+        document.getElementById('my-invite-code').innerText = newCode;
+        loadTopics();
+    }
+    
+    // Start the engine
+    init();
+
+    async function loadTopics() {
+        const { data } = await supabaseClient.from('topics').select('*').order('id', { ascending: false });
+        const feed = document.getElementById('topics-feed');
+        feed.innerHTML = '';
+        if(data) data.forEach(t => {
+            const card = document.createElement('div');
+            card.className = 'topic-card';
+            card.innerText = t.subject;
+            card.onclick = () => openThread(t.id, t.subject);
+            feed.appendChild(card);
+        });
+    }
+
+    async function openThread(id, title) {
+        activeTopicId = id;
+        document.getElementById('inbox-view').style.display = 'none';
+        document.getElementById('thread-view').style.display = 'block';
+        document.getElementById('thread-title').innerText = title;
+        loadReplies();
+    }
+
+    async function loadReplies() {
+        const { data } = await supabaseClient.from('intel').select('*').eq('topic_id', activeTopicId).order('id', { ascending: false });
+        const feed = document.getElementById('replies-feed');
+        feed.innerHTML = '';
+        if(data) data.forEach(m => {
+            const isChief = m.username === 'GHOST-CHIEF-00';
+            const nameColor = isChief ? '#ff4d4d' : '#00ff00'; 
+            feed.innerHTML += `<div class="message-card"><strong style="color:${nameColor}">${m.username}</strong>: ${m.message}</div>`;
+        });
+    }
+
+    document.getElementById('create-topic-btn').onclick = async () => {
+        const sub = document.getElementById('new-topic-input').value;
+        if(sub) { 
+            await supabaseClient.from('topics').insert([{ subject: sub }]); 
+            document.getElementById('new-topic-input').value = '';
+            loadTopics(); 
+        }
+    };
+
+    document.getElementById('submit-reply-btn').onclick = async () => {
+        const msg = document.getElementById('reply-input').value;
+        const myAlias = document.getElementById('my-invite-code').innerText;
+        
+        if(msg && activeTopicId) {
+            await supabaseClient.from('intel').insert([{ 
+                topic_id: activeTopicId, 
+                message: msg, 
+                username: myAlias 
+            }]);
+            document.getElementById('reply-input').value = '';
+            loadReplies();
+        }
+    };
+
+    document.getElementById('logout-btn').onclick = async () => { 
+        await supabaseClient.auth.signOut(); 
+        window.location.href = 'index.html'; 
+    };
+</script>
+</body>
+</html>
