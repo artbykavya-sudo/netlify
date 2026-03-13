@@ -18,9 +18,10 @@
     <h2>IDENTIFY</h2>
     
     <div id="register-section" style="display: none;">
-        <p style="font-size: 0.8em; color: #888; text-align: center;">CREATE SECURE CREDENTIALS</p>
-        <input type="email" id="reg-email" placeholder="Email (Fake is fine)">
+        <p style="font-size: 0.8em; color: #888; text-align: center;">INVITE ONLY. NO EXCEPTIONS.</p>
+        <input type="email" id="reg-email" placeholder="Email">
         <input type="password" id="reg-password" placeholder="Password">
+        <input type="text" id="reg-code" placeholder="VIP Invite Code">
         <button id="register-btn">REGISTER</button>
         <p class="toggle-text" onclick="toggleView()">Already in the crew? Log in.</p>
     </div>
@@ -45,22 +46,36 @@
         document.getElementById('register-section').style.display = document.getElementById('register-section').style.display === 'none' ? 'block' : 'none';
     }
 
-    // REGISTRATION LOGIC
+    // REGISTRATION LOGIC (The Bouncer)
     document.getElementById('register-btn').addEventListener('click', async () => {
         const email = document.getElementById('reg-email').value;
         const password = document.getElementById('reg-password').value;
+        const code = document.getElementById('reg-code').value;
 
-        if (!email || !password) return alert('Email and Password required to enter.');
+        if (!email || !password || !code) return alert('Email, Password, and Invite Code required.');
 
-        // Just sign them up. The board.html will handle generating the Ghost Pirate code!
-        const { error: authError } = await supabaseClient.auth.signUp({ email, password });
-        
-        if (authError) {
-            return alert(authError.message);
-        } else {
-            alert('Identity accepted. Generating Ghost Pirate credentials...');
-            window.location.href = 'board.html';
+        // 1. Master Key Override (So you don't lock yourself out while testing)
+        if (code !== 'CAPTAIN-KEY') {
+            // 2. Check if the code is real and hasn't been burned
+            const { data: inviteData, error: inviteError } = await supabaseClient
+                .from('invites').select('*').eq('code', code).eq('is_used', false).maybeSingle();
+
+            if (inviteError || !inviteData) {
+                return alert('Invalid or burned invite code. Access Denied.');
+            }
         }
+
+        // 3. Code is good! Register the user.
+        const { error: authError } = await supabaseClient.auth.signUp({ email, password });
+        if (authError) return alert(authError.message);
+
+        // 4. Throw the code in the incinerator (Burn it)
+        if (code !== 'CAPTAIN-KEY') {
+            await supabaseClient.from('invites').update({ is_used: true }).eq('code', code);
+        }
+
+        alert('Code accepted. Generating Ghost Pirate credentials...');
+        window.location.href = 'board.html';
     });
 
     // LOGIN LOGIC
@@ -69,7 +84,6 @@
         const password = document.getElementById('login-password').value;
         
         const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        
         if (error) {
             alert(error.message);
         } else {
