@@ -13,14 +13,16 @@
         .input-box { display: flex; margin-bottom: 20px; gap: 10px; }
         input[type="text"] { flex-grow: 1; padding: 12px; background: #000; color: #00ff00; border: 1px solid #00ff00; outline: none; }
         button { padding: 10px 15px; background: #00ff00; color: #000; border: none; font-weight: bold; cursor: pointer; }
-        .message-card { background: #000; border-left: 3px solid #00ff00; padding: 10px; margin-bottom: 10px; font-size: 0.9em; word-wrap: break-word; }
+        .message-card { background: #111; border-left: 3px solid #00ff00; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start; }
+        .burn-btn { background: none; color: #ff4d4d; border: 1px solid #ff4d4d; font-size: 0.7em; padding: 2px 5px; cursor: pointer; margin-left: 10px; }
+        .burn-btn:hover { background: #ff4d4d; color: #000; }
         #new-key-display { color: yellow; display: block; margin-top: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h2 style="margin:0; letter-spacing: 2px;">THE VAULT <span style="font-size: 0.5em; color: cyan;">v3.0</span></h2>
+        <h2 style="margin:0; letter-spacing: 2px;">THE VAULT <span style="font-size: 0.5em; color: cyan;">v3.5</span></h2>
         <button id="logout-btn" style="background: #660000; color: white;">LOGOUT</button>
     </div>
 
@@ -58,43 +60,39 @@
         if (!user) return window.location.href = 'index.html';
 
         let { data: profile } = await supabaseClient.from('profiles').select('recruit_code').eq('id', user.id).maybeSingle();
-        
-        // If profile doesn't exist, create it
-        if (!profile) {
-            const { count } = await supabaseClient.from('profiles').select('*', { count: 'exact', head: true });
-            let newCode = "GHOST-PIRATE-" + (count + 1).toString().padStart(2, '0');
-            if (user.email === 'captain2@network.com') newCode = 'GHOST-CHIEF-00';
-            
-            await supabaseClient.from('profiles').insert([{ id: user.id, recruit_code: newCode }]);
-            document.getElementById('my-invite-code').innerText = newCode;
-        } else {
-            document.getElementById('my-invite-code').innerText = profile.recruit_code;
-        }
+        document.getElementById('my-invite-code').innerText = profile ? profile.recruit_code : "GHOST-UNKNOWN";
 
         loadMessages();
     }
 
     async function loadMessages() {
-        // MATCHING YOUR SCREENSHOT: Table 'intel', Column 'message' and 'username'
-        const { data, error } = await supabaseClient
-            .from('intel')
-            .select('message, username') 
-            .order('id', { ascending: false });
-
-        if (error) {
-            console.error("Error loading feed:", error);
-            return;
-        }
-
+        const { data } = await supabaseClient.from('intel').select('*').order('id', { ascending: false });
         const feed = document.getElementById('feed');
+        const myName = document.getElementById('my-invite-code').innerText;
         feed.innerHTML = '';
+        
         if (data) {
             data.forEach(m => {
-                // We use the exact names from your screenshot
-                feed.innerHTML += `<div class="message-card"><strong style="color: #00ff00">${m.username || 'ANON'}</strong>: ${m.message}</div>`;
+                const canBurn = (m.username === myName || myName === 'GHOST-CHIEF-00');
+                const burnMarkup = canBurn ? `<button class="burn-btn" onclick="burnMessage(${m.id})">BURN</button>` : '';
+                
+                feed.innerHTML += `
+                    <div class="message-card">
+                        <div>
+                            <strong style="color: #00ff00">${m.username}</strong>: ${m.message}
+                        </div>
+                        ${burnMarkup}
+                    </div>`;
             });
         }
     }
+
+    window.burnMessage = async (id) => {
+        if (confirm("Permanently incinerate this intel?")) {
+            await supabaseClient.from('intel').delete().eq('id', id);
+            loadMessages();
+        }
+    };
 
     document.getElementById('generate-key-btn').onclick = async () => {
         const randomString = Math.random().toString(36).substr(2, 5).toUpperCase();
@@ -107,14 +105,6 @@
         const msg = document.getElementById('msg-input').value;
         const myName = document.getElementById('my-invite-code').innerText;
         if (msg) {
-            // MATCHING YOUR SCREENSHOT: Insert into 'message' and 'username'
             await supabaseClient.from('intel').insert([{ message: msg, username: myName }]);
             document.getElementById('msg-input').value = '';
-            loadMessages();
-        }
-    };
-
-    init();
-</script>
-</body>
-</html>
+            load
