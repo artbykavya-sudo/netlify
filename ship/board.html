@@ -11,9 +11,10 @@
         
         /* INPUT AREA */
         .input-section { background: #111; padding: 15px; border: 1px solid #333; margin-bottom: 20px; flex-shrink: 0; }
-        input { background: #000; color: #00ff00; border: 1px solid #004400; padding: 12px; width: calc(100% - 26px); margin-bottom: 10px; outline: none; }
+        input { background: #000; color: #00ff00; border: 1px solid #004400; padding: 12px; width: calc(100% - 26px); margin-bottom: 10px; outline: none; font-family: inherit; }
         input:focus { border-color: #00ff00; }
         button { background: #00ff00; color: #000; border: none; padding: 12px; font-weight: bold; cursor: pointer; width: 100%; letter-spacing: 3px; }
+        button:hover { background: #fff; }
         
         /* THE FEED CONTAINER */
         #feed { 
@@ -29,7 +30,6 @@
             padding: 15px; 
             margin-bottom: 15px; 
             box-shadow: 0 0 10px #00ff0011;
-            position: relative;
         }
 
         .callsign-tag { 
@@ -57,7 +57,7 @@
     </div>
 
     <div class="input-section">
-        <input type="password" id="access-key" placeholder="ACCESS KEY">
+        <input type="password" id="access-key" placeholder="ACCESS KEY (VAULT2026)">
         <input type="text" id="username-input" placeholder="CALLSIGN">
         <input type="text" id="msg-input" placeholder="RECORD INTEL...">
         <button id="send-btn">SEND BROADCAST</button>
@@ -73,7 +73,8 @@
     const supabaseKey = 'sb_publishable_BlynNUCxwVjeeLhPQNtHQg_3x5kPY5o';
     const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-    const MASTER_KEY = "PIRATE-2026"; 
+    // THIS IS THE SECRET KEY
+    const MASTER_KEY = "VAULT2026"; 
 
     async function loadMessages() {
         const { data } = await supabaseClient.from('intel').select('*').order('id', { ascending: false });
@@ -94,14 +95,20 @@
         const msg = document.getElementById('msg-input').value;
 
         if (key !== MASTER_KEY) {
-            alert("KEY REJECTED.");
+            alert("KEY REJECTED. ENSURE ACCESS KEY IS CORRECT.");
             return;
         }
 
         if (msg && user) {
-            await supabaseClient.from('intel').insert([{ message: msg, username: user }]);
-            document.getElementById('msg-input').value = '';
-            loadMessages();
+            const { error } = await supabaseClient.from('intel').insert([{ message: msg, username: user }]);
+            if (error) {
+                alert("DATABASE ERROR: " + error.message);
+            } else {
+                document.getElementById('msg-input').value = '';
+                loadMessages();
+            }
+        } else {
+            alert("BOTH CALLSIGN AND INTEL ARE REQUIRED.");
         }
     };
 
