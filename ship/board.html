@@ -3,62 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Vault - Private Feed</title>
+    <title>The Vault - Intel Feed</title>
     <style>
-        body { background-color: #0a0a0a; color: #00ff00; font-family: 'Courier New', monospace; padding: 20px; margin: 0; display: flex; justify-content: center; }
-        .container { width: 100%; max-width: 600px; display: flex; flex-direction: column; height: 95vh; }
-        .vault-header { border-bottom: 2px solid #00ff00; padding: 10px 0; margin-bottom: 15px; text-align: center; flex-shrink: 0; }
+        body { background-color: #0a0a0a; color: #00ff00; font-family: 'Courier New', monospace; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 700px; display: flex; flex-direction: column; height: 95vh; }
+        .vault-header { border-bottom: 2px solid #00ff00; padding: 10px 0; margin-bottom: 20px; text-align: center; flex-shrink: 0; }
         
-        /* THE INPUT BOX */
-        .gate-box { background: #111; padding: 15px; border: 1px solid #333; margin-bottom: 15px; flex-shrink: 0; }
-        input { background: #000; color: #00ff00; border: 1px solid #004400; padding: 10px; width: calc(100% - 22px); margin-bottom: 8px; outline: none; font-family: inherit; }
+        /* INPUT AREA */
+        .input-section { background: #111; padding: 15px; border: 1px solid #333; margin-bottom: 20px; flex-shrink: 0; }
+        input { background: #000; color: #00ff00; border: 1px solid #004400; padding: 12px; width: calc(100% - 26px); margin-bottom: 10px; outline: none; }
         input:focus { border-color: #00ff00; }
-        button { background: #00ff00; color: #000; border: none; padding: 10px; font-weight: bold; cursor: pointer; width: 100%; letter-spacing: 2px; }
+        button { background: #00ff00; color: #000; border: none; padding: 12px; font-weight: bold; cursor: pointer; width: 100%; letter-spacing: 3px; }
         
-        /* THE INBOX - Page within a page */
+        /* THE FEED CONTAINER */
         #feed { 
-            background: #050505; 
-            border: 2px solid #00ff00; 
-            padding: 15px; 
+            flex-grow: 1; 
             overflow-y: auto; 
-            flex-grow: 1; /* This makes it fill the remaining space */
-            box-shadow: inset 0 0 15px #00ff0022;
+            padding-right: 10px;
         }
 
+        /* INDIVIDUAL MESSAGE CARDS */
         .message-card { 
-            background: #111; 
-            border-left: 3px solid #00ff00; 
-            padding: 12px; 
-            margin-bottom: 10px; 
-            font-size: 0.9em;
-            animation: fadeIn 0.3s ease-in;
+            background: #050505; 
+            border: 1px solid #00ff00; 
+            padding: 15px; 
+            margin-bottom: 15px; 
+            box-shadow: 0 0 10px #00ff0011;
+            position: relative;
         }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        
-        .callsign { color: #00ff00; font-weight: bold; text-transform: uppercase; }
-        .text { color: #ccc; margin-left: 5px; }
-        
-        /* Custom Scrollbar for the Vault look */
-        #feed::-webkit-scrollbar { width: 5px; }
-        #feed::-webkit-scrollbar-thumb { background: #004400; }
+
+        .callsign-tag { 
+            color: #00ff00; 
+            font-weight: bold; 
+            text-transform: uppercase; 
+            border-bottom: 1px solid #004400;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.8em;
+            letter-spacing: 1px;
+        }
+
+        .intel-body { color: #88ff88; line-height: 1.4; white-space: pre-wrap; }
+
+        /* Scrollbar */
+        #feed::-webkit-scrollbar { width: 4px; }
+        #feed::-webkit-scrollbar-thumb { background: #00ff00; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="vault-header">
-        <h1 style="margin:0; letter-spacing: 5px;">THE VAULT</h1>
+        <h1 style="margin:0; letter-spacing: 8px;">THE VAULT</h1>
     </div>
 
-    <div class="gate-box">
+    <div class="input-section">
         <input type="password" id="access-key" placeholder="ACCESS KEY">
         <input type="text" id="username-input" placeholder="CALLSIGN">
-        <input type="text" id="msg-input" placeholder="TYPE INTEL...">
+        <input type="text" id="msg-input" placeholder="RECORD INTEL...">
         <button id="send-btn">SEND BROADCAST</button>
     </div>
 
     <div id="feed">
-        <div style="text-align:center; color:#333;">INITIALIZING FEED...</div>
-    </div>
+        </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -75,8 +81,8 @@
         if (data) {
             feed.innerHTML = data.map(m => `
                 <div class="message-card">
-                    <span class="callsign">${m.username}</span>: 
-                    <span class="text">${m.message}</span>
+                    <span class="callsign-tag">ID: ${m.username || 'UNKNOWN'}</span>
+                    <div class="intel-body">${m.message}</div>
                 </div>
             `).join('');
         }
