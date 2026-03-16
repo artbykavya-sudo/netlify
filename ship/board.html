@@ -22,7 +22,7 @@
 <body>
 <div class="container">
     <div class="header">
-        <h2 style="margin:0; letter-spacing: 2px;">THE VAULT <span style="font-size: 0.5em; color: cyan;">v3.5</span></h2>
+        <h2 style="margin:0; letter-spacing: 2px;">THE VAULT <span style="font-size: 0.5em; color: cyan;">v3.6</span></h2>
         <button id="logout-btn" style="background: #660000; color: white;">LOGOUT</button>
     </div>
 
@@ -48,7 +48,15 @@
 <script>
     const supabaseUrl = 'https://fobshgegvpbzfilqycpb.supabase.co';
     const supabaseKey = 'sb_publishable_BlynNUCxwVjeeLhPQNtHQg_3x5kPY5o';
-    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+    
+    // REINFORCED CONNECTION: Prevents browser tracking blocks
+    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
+        auth: {
+            persistSession: false,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+        }
+    });
 
     document.getElementById('logout-btn').onclick = async () => {
         await supabaseClient.auth.signOut();
@@ -57,16 +65,31 @@
 
     async function init() {
         const { data: { user } } = await supabaseClient.auth.getUser();
-        if (!user) return window.location.href = 'index.html';
+        if (!user) {
+            window.location.href = 'index.html';
+            return;
+        }
 
-        let { data: profile } = await supabaseClient.from('profiles').select('recruit_code').eq('id', user.id).maybeSingle();
+        let { data: profile, error } = await supabaseClient
+            .from('profiles')
+            .select('recruit_code')
+            .eq('id', user.id)
+            .maybeSingle();
+        
+        if (error) console.error("Profile fetch error:", error);
+
         document.getElementById('my-invite-code').innerText = profile ? profile.recruit_code : "GHOST-UNKNOWN";
-
         loadMessages();
     }
 
     async function loadMessages() {
-        const { data } = await supabaseClient.from('intel').select('*').order('id', { ascending: false });
+        const { data, error } = await supabaseClient
+            .from('intel')
+            .select('*')
+            .order('id', { ascending: false });
+
+        if (error) console.error("Feed error:", error);
+
         const feed = document.getElementById('feed');
         const myName = document.getElementById('my-invite-code').innerText;
         feed.innerHTML = '';
@@ -79,7 +102,7 @@
                 feed.innerHTML += `
                     <div class="message-card">
                         <div>
-                            <strong style="color: #00ff00">${m.username}</strong>: ${m.message}
+                            <strong style="color: #00ff00">${m.username || 'ANON'}</strong>: ${m.message}
                         </div>
                         ${burnMarkup}
                     </div>`;
@@ -97,14 +120,31 @@
     document.getElementById('generate-key-btn').onclick = async () => {
         const randomString = Math.random().toString(36).substr(2, 5).toUpperCase();
         const newInviteKey = "KEY-" + randomString;
-        await supabaseClient.from('invites').insert([{ code: newInviteKey, is_used: false }]);
-        document.getElementById('new-key-display').innerText = "NEW KEY: " + newInviteKey;
+        const { error } = await supabaseClient.from('invites').insert([{ code: newInviteKey, is_used: false }]);
+        
+        if (error) {
+            alert("Error: Database blocked the key generation.");
+        } else {
+            document.getElementById('new-key-display').innerText = "NEW KEY: " + newInviteKey;
+        }
     };
 
     document.getElementById('send-btn').onclick = async () => {
-        const msg = document.getElementById('msg-input').value;
+        const msgInput = document.getElementById('msg-input');
+        const msg = msgInput.value;
         const myName = document.getElementById('my-invite-code').innerText;
         if (msg) {
-            await supabaseClient.from('intel').insert([{ message: msg, username: myName }]);
-            document.getElementById('msg-input').value = '';
-            load
+            const { error } = await supabaseClient.from('intel').insert([{ message: msg, username: myName }]);
+            if (!error) {
+                msgInput.value = '';
+                loadMessages();
+            } else {
+                alert("Broadcast failed. Check connection.");
+            }
+        }
+    };
+
+    init();
+</script>
+</body>
+</html>
