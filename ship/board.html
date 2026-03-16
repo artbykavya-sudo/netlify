@@ -3,42 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Vault - Network</title>
+    <title>The Vault - Private Feed</title>
     <style>
-        body { background-color: #0a0a0a; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; padding: 20px; }
-        .container { max-width: 700px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00ff00; padding-bottom: 10px; margin-bottom: 20px; }
-        .invite-box { background: #111; border: 1px dashed #00ff00; padding: 20px; text-align: center; margin-bottom: 20px; }
-        .generator-box { background: #050505; border: 1px solid #333; padding: 15px; text-align: center; margin-bottom: 20px; }
-        .input-box { display: flex; margin-bottom: 20px; gap: 10px; }
-        input[type="text"] { flex-grow: 1; padding: 12px; background: #000; color: #00ff00; border: 1px solid #00ff00; outline: none; }
-        button { padding: 10px 15px; background: #00ff00; color: #000; border: none; font-weight: bold; cursor: pointer; }
-        .message-card { background: #111; border-left: 3px solid #00ff00; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start; }
-        .burn-btn { background: none; color: #ff4d4d; border: 1px solid #ff4d4d; font-size: 0.7em; padding: 2px 5px; cursor: pointer; margin-left: 10px; }
-        .burn-btn:hover { background: #ff4d4d; color: #000; }
-        #new-key-display { color: yellow; display: block; margin-top: 10px; font-weight: bold; }
+        body { background-color: #0a0a0a; color: #00ff00; font-family: 'Courier New', monospace; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .vault-header { border-bottom: 2px solid #00ff00; padding-bottom: 10px; margin-bottom: 20px; text-align: center; }
+        .gate-box { background: #111; padding: 20px; border: 1px dashed #00ff00; margin-bottom: 20px; }
+        input { background: #000; color: #00ff00; border: 1px solid #00ff00; padding: 10px; width: calc(100% - 22px); margin-bottom: 10px; outline: none; }
+        button { background: #00ff00; color: #000; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; width: 100%; }
+        .message-card { background: #111; border-left: 3px solid #00ff00; padding: 15px; margin-bottom: 10px; }
+        .timestamp { font-size: 0.7em; color: #555; display: block; margin-top: 5px; }
     </style>
 </head>
 <body>
 <div class="container">
-    <div class="header">
-        <h2 style="margin:0; letter-spacing: 2px;">THE VAULT <span style="font-size: 0.5em; color: cyan;">v3.6</span></h2>
-        <button id="logout-btn" style="background: #660000; color: white;">LOGOUT</button>
+    <div class="vault-header">
+        <h1>THE VAULT</h1>
+        <p style="font-size: 0.8em; color: #444;">INTERNAL NETWORK ONLY</p>
     </div>
 
-    <div class="invite-box">
-        <span style="font-size: 0.8em; color: #888;">IDENTITY:</span>
-        <strong id="my-invite-code" style="color: white; font-size: 1.6em; display: block;">SYNCING...</strong>
-    </div>
-
-    <div class="generator-box">
-        <button id="generate-key-btn" style="background: #222; color: #00ff00; border: 1px solid #00ff00;">GENERATE 1-TIME INVITE KEY</button>
-        <span id="new-key-display"></span>
-    </div>
-
-    <div class="input-box">
-        <input type="text" id="msg-input" placeholder="Broadcast intel...">
-        <button id="send-btn">SEND</button>
+    <div class="gate-box">
+        <input type="password" id="access-key" placeholder="ENTER ACCESS KEY TO POST">
+        <input type="text" id="username-input" placeholder="YOUR CALLSIGN (e.g. GHOST-01)">
+        <input type="text" id="msg-input" placeholder="BROADCAST INTEL...">
+        <button id="send-btn">SEND BROADCAST</button>
     </div>
 
     <div id="feed"></div>
@@ -48,103 +36,42 @@
 <script>
     const supabaseUrl = 'https://fobshgegvpbzfilqycpb.supabase.co';
     const supabaseKey = 'sb_publishable_BlynNUCxwVjeeLhPQNtHQg_3x5kPY5o';
-    
-    // REINFORCED CONNECTION: Prevents browser tracking blocks
-    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
-        auth: {
-            persistSession: false,
-            autoRefreshToken: true,
-            detectSessionInUrl: true
-        }
-    });
+    const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-    document.getElementById('logout-btn').onclick = async () => {
-        await supabaseClient.auth.signOut();
-        window.location.href = 'index.html';
-    };
-
-    async function init() {
-        const { data: { user } } = await supabaseClient.auth.getUser();
-        if (!user) {
-            window.location.href = 'index.html';
-            return;
-        }
-
-        let { data: profile, error } = await supabaseClient
-            .from('profiles')
-            .select('recruit_code')
-            .eq('id', user.id)
-            .maybeSingle();
-        
-        if (error) console.error("Profile fetch error:", error);
-
-        document.getElementById('my-invite-code').innerText = profile ? profile.recruit_code : "GHOST-UNKNOWN";
-        loadMessages();
-    }
+    const MASTER_KEY = "PIRATE-2026"; // CHANGE THIS TO YOUR SECRET KEY
 
     async function loadMessages() {
-        const { data, error } = await supabaseClient
-            .from('intel')
-            .select('*')
-            .order('id', { ascending: false });
-
-        if (error) console.error("Feed error:", error);
-
+        const { data } = await supabaseClient.from('intel').select('*').order('id', { ascending: false });
         const feed = document.getElementById('feed');
-        const myName = document.getElementById('my-invite-code').innerText;
         feed.innerHTML = '';
-        
         if (data) {
             data.forEach(m => {
-                const canBurn = (m.username === myName || myName === 'GHOST-CHIEF-00');
-                const burnMarkup = canBurn ? `<button class="burn-btn" onclick="burnMessage(${m.id})">BURN</button>` : '';
-                
-                feed.innerHTML += `
-                    <div class="message-card">
-                        <div>
-                            <strong style="color: #00ff00">${m.username || 'ANON'}</strong>: ${m.message}
-                        </div>
-                        ${burnMarkup}
-                    </div>`;
+                feed.innerHTML += `<div class="message-card"><strong>${m.username}</strong>: ${m.message}</div>`;
             });
         }
     }
 
-    window.burnMessage = async (id) => {
-        if (confirm("Permanently incinerate this intel?")) {
-            await supabaseClient.from('intel').delete().eq('id', id);
-            loadMessages();
-        }
-    };
-
-    document.getElementById('generate-key-btn').onclick = async () => {
-        const randomString = Math.random().toString(36).substr(2, 5).toUpperCase();
-        const newInviteKey = "KEY-" + randomString;
-        const { error } = await supabaseClient.from('invites').insert([{ code: newInviteKey, is_used: false }]);
-        
-        if (error) {
-            alert("Error: Database blocked the key generation.");
-        } else {
-            document.getElementById('new-key-display').innerText = "NEW KEY: " + newInviteKey;
-        }
-    };
-
     document.getElementById('send-btn').onclick = async () => {
-        const msgInput = document.getElementById('msg-input');
-        const msg = msgInput.value;
-        const myName = document.getElementById('my-invite-code').innerText;
-        if (msg) {
-            const { error } = await supabaseClient.from('intel').insert([{ message: msg, username: myName }]);
-            if (!error) {
-                msgInput.value = '';
-                loadMessages();
-            } else {
-                alert("Broadcast failed. Check connection.");
-            }
+        const key = document.getElementById('access-key').value;
+        const user = document.getElementById('username-input').value;
+        const msg = document.getElementById('msg-input').value;
+
+        if (key !== MASTER_KEY) {
+            alert("INVALID ACCESS KEY. BROADCAST BLOCKED.");
+            return;
+        }
+
+        if (msg && user) {
+            await supabaseClient.from('intel').insert([{ message: msg, username: user }]);
+            document.getElementById('msg-input').value = '';
+            loadMessages();
+        } else {
+            alert("FILL ALL FIELDS.");
         }
     };
 
-    init();
+    loadMessages();
+    setInterval(loadMessages, 5000); // Auto-refresh every 5 seconds
 </script>
 </body>
 </html>
